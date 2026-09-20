@@ -114,8 +114,17 @@ jobs:
                   print(f"{name} {pkg_version}: already bottled {len(files)} way(s)")
                   continue
 
-              print(f"{name} {pkg_version}: has {len(files)} bottle(s), wants {len(platforms)}")
-              specs.append(f"{name}@{pkg_version}")
+              # brew bottle numbers a rebuild from what origin/HEAD already
+              # says. Here the formula is always already on origin/HEAD by
+              # the time it is built, so the first bottle of a version would
+              # come out as rebuild 1. `first` below turns that off. A
+              # version that is being bottled again keeps the counter, which
+              # is what stops the new bottles colliding with the old ones in
+              # the release.
+              first = "again" if bottle.get("root_url") == want else "first"
+
+              print(f"{name} {pkg_version}: has {len(files)} bottle(s), wants {len(platforms)} ({first})")
+              specs.append(f"{name}|{pkg_version}|{first}")
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
               out.write(f"specs={' '.join(specs)}\n")
@@ -161,12 +170,16 @@ jobs:
           SPECS: ${{ needs.plan.outputs.specs }}
         run: |
           for spec in $SPECS; do
-            name="${spec%@*}"
-            version="${spec#*@}"
+            IFS='|' read -r name version rebuild <<< "$spec"
+
+            bottle_args=(--json --root-url="$ROOT_URL/$name-$version")
+            if [ "$rebuild" = first ]; then
+              bottle_args+=(--no-rebuild)
+            fi
 
             brew install --build-bottle --verbose "$TAP/$name"
             brew test --verbose "$TAP/$name"
-            brew bottle --json --root-url="$ROOT_URL/$name-$version" "$TAP/$name"
+            brew bottle "${bottle_args[@]}" "$TAP/$name"
           done
 
           ls -l ./*.bottle.*
@@ -175,9 +188,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bottles-${{ matrix.platform.name }}
-          path: |
-            *.bottle.tar.gz
-            *.bottle.json
+          path: '*.bottle.*'
           if-no-files-found: error
 
   # Uploads every bottle, writes the bottle block into the formulae, and
@@ -233,4 +244,4 @@ jobs:
       - name: Record what built the bottles
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: ${{ steps.set-up-homebrew.outputs.repository-path }}/*.bottle.tar.gz
+          subject-path: ${{ steps.set-up-homebrew.outputs.repository-path }}/*.bottle*.tar.gz
