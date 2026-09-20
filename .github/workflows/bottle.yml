@@ -36,10 +36,15 @@ env:
   # so a macOS runner is chosen for the oldest release worth supporting:
   # Homebrew will pour a bottle built on an older macOS onto a newer one, but
   # never the other way around.
+  #
+  # Intel macOS is missing on purpose. Homebrew calls it a tier 3
+  # configuration and homebrew-core no longer bottles llvm, openssl and the
+  # rest of what crystal needs for it, so a build there starts by compiling
+  # LLVM. Anyone on an Intel Mac builds from source or takes the binary from
+  # the upstream release.
   PLATFORMS: >-
     [
       {"name": "macos-arm64", "runner": "macos-15"},
-      {"name": "macos-x86_64", "runner": "macos-15-intel"},
       {"name": "linux-x86_64", "runner": "ubuntu-latest",
        "container": {"image": "ghcr.io/homebrew/brew:main", "options": "--privileged"}},
       {"name": "linux-arm64", "runner": "ubuntu-24.04-arm",

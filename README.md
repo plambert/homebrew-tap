@@ -1,7 +1,7 @@
 # Paul's Homebrew tap
 
-Formulae for my own tools, with bottles for Apple Silicon and Intel macOS and
-for x86_64 and arm64 Linux.
+Formulae for my own tools, with bottles for Apple Silicon macOS and for
+x86_64 and arm64 Linux.
 
 ## Installing
 
