@@ -234,10 +234,13 @@ jobs:
           HOMEBREW_GIT_COMMITTER_EMAIL: ${{ steps.git-setup.outputs.email }}
         run: brew pr-upload --verbose
 
+      # No token here. Setting up Homebrew already wrote an Authorization
+      # header into the git config for this job, and handing this action a
+      # token adds a second one in a narrower scope. git then sends both and
+      # GitHub answers 400.
       - name: Push the bottle commit
         uses: Homebrew/actions/git-try-push@1e34f2e2acaa766b7efacb8c26352e6abbb023f9 # 2026.09.13.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           directory: ${{ steps.set-up-homebrew.outputs.repository-path }}
           branch: main
 
