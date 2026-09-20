@@ -1,0 +1,231 @@
+# Builds and publishes bottles for the formulae in this tap.
+#
+# A push to main that touches a formula starts it. The first job settles which
+# formulae are short a bottle; when none are, the rest of the run does
+# nothing. That check is also what stops the run that this workflow's own
+# publish commit sets off, so there is no loop to break.
+#
+# Bottles are hosted as release assets on this repository, one release per
+# formula version. The root_url written into each formula's bottle block
+# points at that release.
+name: bottle
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - Formula/**
+      - .github/workflows/bottle.yml
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: bottle-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+env:
+  ROOT_URL: https://github.com/${{ github.repository }}/releases/download
+
+  # One entry per bottle. The runner decides the tag the bottle is built for,
+  # so a macOS runner is chosen for the oldest release worth supporting:
+  # Homebrew will pour a bottle built on an older macOS onto a newer one, but
+  # never the other way around.
+  PLATFORMS: >-
+    [
+      {"name": "macos-arm64", "runner": "macos-15"},
+      {"name": "macos-x86_64", "runner": "macos-15-intel"},
+      {"name": "linux-x86_64", "runner": "ubuntu-latest",
+       "container": {"image": "ghcr.io/homebrew/brew:main", "options": "--privileged"}},
+      {"name": "linux-arm64", "runner": "ubuntu-24.04-arm",
+       "container": {"image": "ghcr.io/homebrew/brew:main", "options": "--privileged"}}
+    ]
+
+jobs:
+  # Decides what needs building before anything spends a runner on it.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      specs: ${{ steps.plan.outputs.specs }}
+      platforms: ${{ steps.plan.outputs.platforms }}
+      any: ${{ steps.plan.outputs.any }}
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@1e34f2e2acaa766b7efacb8c26352e6abbb023f9 # 2026.09.13.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trust the tap
+        env:
+          TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
+        run: brew trust --tap "$TAP"
+
+      - name: Work out which formulae are missing bottles
+        id: plan
+        env:
+          TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
+          TAP_PATH: ${{ steps.set-up-homebrew.outputs.repository-path }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import subprocess
+
+          tap = os.environ["TAP"]
+          tap_path = pathlib.Path(os.environ["TAP_PATH"])
+          root_url = os.environ["ROOT_URL"]
+          platforms = json.loads(os.environ["PLATFORMS"])
+
+          specs = []
+          for path in sorted((tap_path / "Formula").glob("*.rb")):
+              name = path.stem
+              out = subprocess.run(
+                  ["brew", "info", "--json=v2", f"{tap}/{name}"],
+                  capture_output=True, text=True, check=True,
+              ).stdout
+              formula = json.loads(out)["formulae"][0]
+
+              # A revision bumps the packaged version without moving upstream,
+              # and Homebrew spells that `0.1.0_1`. The bottles belong to it.
+              version = formula["versions"]["stable"]
+              revision = formula.get("revision", 0)
+              pkg_version = f"{version}_{revision}" if revision else version
+
+              bottle = (formula.get("bottle") or {}).get("stable") or {}
+              files = bottle.get("files") or {}
+              want = f"{root_url}/{name}-{pkg_version}"
+
+              # The count is compared rather than the tag names. Bottle tags
+              # follow whatever macOS the runner images are on, which moves
+              # without this file changing; the number of platforms does not.
+              if bottle.get("root_url") == want and len(files) >= len(platforms):
+                  print(f"{name} {pkg_version}: already bottled {len(files)} way(s)")
+                  continue
+
+              print(f"{name} {pkg_version}: has {len(files)} bottle(s), wants {len(platforms)}")
+              specs.append(f"{name}@{pkg_version}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"specs={' '.join(specs)}\n")
+              out.write(f"any={'true' if specs else 'false'}\n")
+              out.write(f"platforms={json.dumps(platforms)}\n")
+          PY
+
+  # One runner per bottle tag. Each builds from source and keeps the bottle
+  # and its JSON as an artifact; nothing is published from here.
+  bottle:
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.plan.outputs.platforms) }}
+    runs-on: ${{ matrix.platform.runner }}
+    container: ${{ fromJSON(toJSON(matrix.platform.container)) }} # zizmor: ignore[unpinned-images]
+    permissions:
+      contents: read
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@1e34f2e2acaa766b7efacb8c26352e6abbb023f9 # 2026.09.13.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Homebrew Bundler RubyGems
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.set-up-homebrew.outputs.gems-path }}
+          key: ${{ matrix.platform.name }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ${{ matrix.platform.name }}-rubygems-
+
+      - name: Trust the tap
+        env:
+          TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
+        run: brew trust --tap "$TAP"
+
+      - name: Build and bottle
+        env:
+          TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
+          SPECS: ${{ needs.plan.outputs.specs }}
+        run: |
+          for spec in $SPECS; do
+            name="${spec%@*}"
+            version="${spec#*@}"
+
+            brew install --build-bottle --verbose "$TAP/$name"
+            brew test --verbose "$TAP/$name"
+            brew bottle --json --root-url="$ROOT_URL/$name-$version" "$TAP/$name"
+          done
+
+          ls -l ./*.bottle.*
+
+      - name: Keep the bottle for the publish job
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bottles-${{ matrix.platform.name }}
+          path: |
+            *.bottle.tar.gz
+            *.bottle.json
+          if-no-files-found: error
+
+  # Uploads every bottle, writes the bottle block into the formulae, and
+  # pushes that commit. It runs once, after every platform has succeeded, so a
+  # formula never lands half-bottled.
+  publish:
+    needs: [plan, bottle]
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@1e34f2e2acaa766b7efacb8c26352e6abbb023f9 # 2026.09.13.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up git
+        id: git-setup
+        uses: Homebrew/actions/git-user-config@1e34f2e2acaa766b7efacb8c26352e6abbb023f9 # 2026.09.13.1
+
+      - name: Trust the tap
+        env:
+          TAP: ${{ steps.set-up-homebrew.outputs.tap-name }}
+        run: brew trust --tap "$TAP"
+
+      # brew pr-upload reads every *.bottle.json in the working directory, so
+      # the artifacts land in the tap checkout it also has to commit to.
+      - name: Collect the bottles
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          path: ${{ steps.set-up-homebrew.outputs.repository-path }}
+          pattern: bottles-*
+          merge-multiple: true
+
+      - name: Upload the bottles and write the bottle block
+        working-directory: ${{ steps.set-up-homebrew.outputs.repository-path }}
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_GIT_COMMITTER_NAME: ${{ steps.git-setup.outputs.name }}
+          HOMEBREW_GIT_COMMITTER_EMAIL: ${{ steps.git-setup.outputs.email }}
+        run: brew pr-upload --verbose
+
+      - name: Push the bottle commit
+        uses: Homebrew/actions/git-try-push@1e34f2e2acaa766b7efacb8c26352e6abbb023f9 # 2026.09.13.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          directory: ${{ steps.set-up-homebrew.outputs.repository-path }}
+          branch: main
+
+      - name: Record what built the bottles
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ steps.set-up-homebrew.outputs.repository-path }}/*.bottle.tar.gz
