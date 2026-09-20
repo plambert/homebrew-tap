@@ -41,8 +41,17 @@ brew trust plambert/tap
 `bottle.yml` runs when a formula changes on `main`. It works out which
 formulae have no bottle for the current version, builds one on a runner per
 platform, uploads them to a release on this repository, and commits the
-resulting `bottle do` block back to `main`. That commit triggers the workflow
-once more, which finds nothing to do and stops.
+resulting `bottle do` block back to `main`.
+
+That last commit does not start the workflow again: GitHub does not run
+workflows for pushes made with a workflow's own token. The first job checks
+anyway, so an edit to a formula that is already bottled costs one short job
+rather than three builds.
+
+There is no Intel macOS bottle. Homebrew treats that as a tier 3
+configuration and no longer bottles `llvm`, `openssl` or `pcre2` for it, so
+`crystal` cannot be installed there as a build dependency without compiling
+LLVM first.
 
 Bottles live as release assets here, one release per formula version, tagged
 `<formula>-<version>`. The `root_url` in each formula's bottle block points at
