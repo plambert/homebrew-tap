@@ -15,6 +15,13 @@ class CrystalRoguelike < Formula
     strategy :github_latest
   end
 
+  bottle do
+    root_url "https://github.com/plambert/homebrew-tap/releases/download/crystal-roguelike-0.1.0"
+    sha256 cellar: :any, arm64_sequoia: "1fb059ed102e4f5793db692ee0ddf5cc9304dcb56955393e8f19124a3495fa5c"
+    sha256 cellar: :any, arm64_linux:   "832aea348405a3e1bfba28667bb4c0f434836ef0633625fd91ec5377b5be4359"
+    sha256 cellar: :any, x86_64_linux:  "483db043f0517a853929d8d3f131bc49fe9d4338e17a1420b0b1279485314b36"
+  end
+
   # The compiler and shards both come from the crystal formula, and are gone
   # once the build finishes. The collector and pcre2 stay: a Crystal binary
   # links both by path.
