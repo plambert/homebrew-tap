@@ -3,8 +3,8 @@
 class CrystalRoguelike < Formula
   desc "Terminal roguelike in the spirit of Nethack"
   homepage "https://github.com/plambert/crystal-roguelike.cr"
-  url "https://github.com/plambert/crystal-roguelike.cr/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "214cac6da165cca12ae894e32362f71ed93f0f788bbde4717cc945a05a268918"
+  url "https://github.com/plambert/crystal-roguelike.cr/archive/refs/tags/v0.2.2.tar.gz"
+  sha256 "0457e4343b492275267d869a8d64cf279bd165908eed90b1642ebe92bf943996"
   license "MIT"
   head "https://github.com/plambert/crystal-roguelike.cr.git", branch: "main"
 
