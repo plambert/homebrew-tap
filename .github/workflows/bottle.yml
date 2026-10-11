@@ -62,7 +62,7 @@ jobs:
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
-        uses: Homebrew/actions/setup-homebrew@1e34f2e2acaa766b7efacb8c26352e6abbb023f9 # 2026.09.13.1
+        uses: Homebrew/actions/setup-homebrew@e99025eb970cfa124b8284a35463d87426917478 # 2026.09.28.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -148,7 +148,7 @@ jobs:
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
-        uses: Homebrew/actions/setup-homebrew@1e34f2e2acaa766b7efacb8c26352e6abbb023f9 # 2026.09.13.1
+        uses: Homebrew/actions/setup-homebrew@e99025eb970cfa124b8284a35463d87426917478 # 2026.09.28.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -185,7 +185,7 @@ jobs:
           ls -l ./*.bottle.*
 
       - name: Keep the bottle for the publish job
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bottles-${{ matrix.platform.name }}
           path: '*.bottle.*'
@@ -204,13 +204,13 @@ jobs:
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
-        uses: Homebrew/actions/setup-homebrew@1e34f2e2acaa766b7efacb8c26352e6abbb023f9 # 2026.09.13.1
+        uses: Homebrew/actions/setup-homebrew@e99025eb970cfa124b8284a35463d87426917478 # 2026.09.28.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up git
         id: git-setup
-        uses: Homebrew/actions/git-user-config@1e34f2e2acaa766b7efacb8c26352e6abbb023f9 # 2026.09.13.1
+        uses: Homebrew/actions/git-user-config@e99025eb970cfa124b8284a35463d87426917478 # 2026.09.28.1
 
       - name: Trust the tap
         env:
@@ -220,7 +220,7 @@ jobs:
       # brew pr-upload reads every *.bottle.json in the working directory, so
       # the artifacts land in the tap checkout it also has to commit to.
       - name: Collect the bottles
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.0
         with:
           path: ${{ steps.set-up-homebrew.outputs.repository-path }}
           pattern: bottles-*
@@ -239,7 +239,7 @@ jobs:
       # token adds a second one in a narrower scope. git then sends both and
       # GitHub answers 400.
       - name: Push the bottle commit
-        uses: Homebrew/actions/git-try-push@1e34f2e2acaa766b7efacb8c26352e6abbb023f9 # 2026.09.13.1
+        uses: Homebrew/actions/git-try-push@e99025eb970cfa124b8284a35463d87426917478 # 2026.09.28.1
         with:
           directory: ${{ steps.set-up-homebrew.outputs.repository-path }}
           branch: main
